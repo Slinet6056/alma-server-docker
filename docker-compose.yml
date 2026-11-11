@@ -1,0 +1,36 @@
+services:
+  alma:
+    build:
+      context: .
+      args:
+        ALMA_VERSION: "0.4.567"
+        # Linux 主机上如果 uid 不是 1000，改成 `id -u` / `id -g` 的结果再 build
+        PUID: "1000"
+        PGID: "1000"
+        # 想瘦身可以关掉用不上的：WITH_RUST=0 / WITH_GO=0 / WITH_JVM=0
+    image: alma-server-dev:0.4.567
+    container_name: alma-server-dev
+    restart: unless-stopped
+    ports:
+      # 只绑本机，别直接对公网开；远程用 SSH 端口转发
+      - "127.0.0.1:23011:23001"
+    environment:
+      ALMA_TOOL_APPROVAL: "auto"
+      TZ: "Asia/Shanghai"
+      # 需要代理出海就解开（OrbStack / Docker Desktop 的 host.docker.internal）
+      # HTTP_PROXY: "http://host.docker.internal:6152"
+      # HTTPS_PROXY: "http://host.docker.internal:6152"
+      # NO_PROXY: "localhost,127.0.0.1"
+    volumes:
+      # 你的项目目录，容器里就是 /workspace
+      - ./workspace:/workspace
+      # 家目录整个持久化：provider key、threads、skills、go/cargo 缓存都在里面
+      - alma-home:/home/alma
+    working_dir: /workspace
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    stdin_open: true
+    tty: true
+
+volumes:
+  alma-home:

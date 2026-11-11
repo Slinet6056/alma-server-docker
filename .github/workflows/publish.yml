@@ -1,0 +1,61 @@
+name: Publish Docker image
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-docker
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Get latest Alma release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release="$(gh api repos/yetone/alma-releases/releases/latest)"
+          version="$(jq --raw-output --exit-status \
+            '.tag_name | capture("^v(?<version>[0-9]+\\.[0-9]+\\.[0-9]+)$").version' <<< "$release")"
+          for arch in x64 arm64; do
+            jq --exit-status --arg name "alma-server-${version}-linux-${arch}.tar.gz" \
+              'any(.assets[]; .name == $name)' <<< "$release" > /dev/null
+          done
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: ALMA_VERSION=${{ steps.release.outputs.version }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/alma-server:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/alma-server:${{ steps.release.outputs.version }}

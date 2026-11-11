@@ -1,0 +1,9 @@
+.git
+.jj
+.gitignore
+workspace
+outputs
+work
+tmp
+*.tar.gz
+node_modules
